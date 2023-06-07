@@ -1,6 +1,7 @@
 import math
 import os
 import random
+import librosa
 import torch
 import torch.utils.data
 import numpy as np
@@ -11,8 +12,11 @@ from librosa.filters import mel as librosa_mel_fn
 MAX_WAV_VALUE = 32768.0
 
 
-def load_wav(full_path):
+def load_wav(full_path, sr=None):
     sampling_rate, data = read(full_path)
+    if sr!=None and sampling_rate!=sr:
+        data = librosa.resample(data.astype(float), sampling_rate, sr)
+        sampling_rate = sr
     return data, sampling_rate
 
 
@@ -71,6 +75,31 @@ def mel_spectrogram(y, n_fft, num_mels, sampling_rate, hop_size, win_size, fmin,
 
     return spec
 
+# def mel_spectrogram(y, n_fft, num_mels, sampling_rate, hop_size, win_size, fmin, fmax, center=False):
+#     y = y.detach().cpu().numpy()[0]
+#     spec = librosa.core.stft(y=y, 
+#                              n_fft=n_fft, 
+#                              hop_length=hop_size, 
+#                              win_length=win_size,
+#                              window='hann',
+#                              center=True,
+#                              pad_mode='reflect')
+#     spec = librosa.magphase(spec)[0]
+#     log_spectrogram = np.log(spec).astype(np.float32)
+
+#     mel_spectrogram = librosa.feature.melspectrogram(S=spec, 
+#                                                      sr=sampling_rate, 
+#                                                      n_mels=num_mels,
+#                                                      power=1.0, #actually not used given "S=spec"
+#                                                      fmin=fmin,
+#                                                      fmax=fmax, # sr/2 -> 8000
+#                                                      htk=False,
+#                                                      norm=1
+#                                                      )
+#     log_mel_spectrogram = np.log(mel_spectrogram).astype(np.float32)
+#     mel = torch.FloatTensor(log_mel_spectrogram).unsqueeze(0)
+#     return mel
+
 
 def get_dataset_filelist(a):
     with open(a.input_training_file, 'r', encoding='utf-8') as fi:
@@ -111,14 +140,15 @@ class MelDataset(torch.utils.data.Dataset):
     def __getitem__(self, index):
         filename = self.audio_files[index]
         if self._cache_ref_count == 0:
-            audio, sampling_rate = load_wav(filename)
+            audio, _ = load_wav(filename, self.sampling_rate)
+            # audio, sampling_rate = load_wav(filename)
             audio = audio / MAX_WAV_VALUE
             if not self.fine_tuning:
                 audio = normalize(audio) * 0.95
             self.cached_wav = audio
-            if sampling_rate != self.sampling_rate:
-                raise ValueError("{} SR doesn't match target {} SR".format(
-                    sampling_rate, self.sampling_rate))
+            # if sampling_rate != self.sampling_rate:
+            #     raise ValueError("{} SR doesn't match target {} SR".format(
+            #         sampling_rate, self.sampling_rate))
             self._cache_ref_count = self.n_cache_reuse
         else:
             audio = self.cached_wav

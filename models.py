@@ -80,12 +80,24 @@ class Generator(torch.nn.Module):
         self.num_upsamples = len(h.upsample_rates)
         self.conv_pre = weight_norm(Conv1d(80, h.upsample_initial_channel, 7, 1, padding=3))
         resblock = ResBlock1 if h.resblock == '1' else ResBlock2
-
+        
         self.ups = nn.ModuleList()
-        for i, (u, k) in enumerate(zip(h.upsample_rates, h.upsample_kernel_sizes)):
-            self.ups.append(weight_norm(
-                ConvTranspose1d(h.upsample_initial_channel//(2**i), h.upsample_initial_channel//(2**(i+1)),
-                                k, u, padding=(k-u)//2)))
+        if h.structure=="original":
+            for i, (u, k) in enumerate(zip(h.upsample_rates, h.upsample_kernel_sizes)):
+                self.ups.append(weight_norm(
+                    ConvTranspose1d(h.upsample_initial_channel//(2**i), h.upsample_initial_channel//(2**(i+1)),
+                                    k, u, padding=(k-u)//2)))
+        else:
+            for i, (u, k) in enumerate(zip(h.upsample_rates, h.upsample_kernel_sizes)):
+                if i==1:
+                    self.ups.append(weight_norm(
+                        ConvTranspose1d(h.upsample_initial_channel//(2**i), h.upsample_initial_channel//(2**(i+1)),
+                                        k, u, padding=(k-u+5)//2)))
+                else:
+                    self.ups.append(weight_norm(
+                        ConvTranspose1d(h.upsample_initial_channel//(2**i), h.upsample_initial_channel//(2**(i+1)),
+                                        k, u, padding=(k-u)//2)))
+
 
         self.resblocks = nn.ModuleList()
         for i in range(len(self.ups)):
@@ -98,10 +110,13 @@ class Generator(torch.nn.Module):
         self.conv_post.apply(init_weights)
 
     def forward(self, x):
+        # print(x.shape)
         x = self.conv_pre(x)
+        # print(x.shape)
         for i in range(self.num_upsamples):
             x = F.leaky_relu(x, LRELU_SLOPE)
             x = self.ups[i](x)
+            # print(x.shape)
             xs = None
             for j in range(self.num_kernels):
                 if xs is None:
@@ -109,6 +124,7 @@ class Generator(torch.nn.Module):
                 else:
                     xs += self.resblocks[i*self.num_kernels+j](x)
             x = xs / self.num_kernels
+            # print(x.shape)
         x = F.leaky_relu(x)
         x = self.conv_post(x)
         x = torch.tanh(x)

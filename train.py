@@ -7,7 +7,7 @@ import argparse
 import json
 import torch
 import torch.nn.functional as F
-from torch.utils.tensorboard import SummaryWriter
+# from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import DistributedSampler, DataLoader
 import torch.multiprocessing as mp
 from torch.distributed import init_process_group
@@ -27,9 +27,9 @@ def train(rank, a, h):
                            world_size=h.dist_config['world_size'] * h.num_gpus, rank=rank)
 
     torch.cuda.manual_seed(h.seed)
+    print(h)
     device = torch.device('cuda:{:d}'.format(rank))
-
-    generator = Generator(h).to(device)
+    # generator = Generator(h).to(device)
     mpd = MultiPeriodDiscriminator().to(device)
     msd = MultiScaleDiscriminator().to(device)
 
@@ -244,6 +244,7 @@ def main():
     parser.add_argument('--fine_tuning', default=False, type=bool)
 
     a = parser.parse_args()
+    
 
     with open(a.config) as f:
         data = f.read()
@@ -261,6 +262,7 @@ def main():
     else:
         pass
 
+    print("start")
     if h.num_gpus > 1:
         mp.spawn(train, nprocs=h.num_gpus, args=(a, h,))
     else:
